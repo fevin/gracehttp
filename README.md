@@ -1,12 +1,12 @@
 # gracehttp
 ## 支持功能
-1. 平滑重启（Zero-Downtime restart server）；
+1. 平滑重启（`Zero-Downtime`）；
 2. 平滑关闭；
 3. 多 `Server` 添加（包含 `HTTP` 、`HTTPS`）；
 4. 自定义日志组件；
 
 ## 使用指南
-### 添加服务器
+### 添加服务
 ```go
     // http
 	srv1 := &http.Server{
@@ -27,6 +27,10 @@
 ```
 
 如上所示，只需创建好 `Server` 对象，调用 `gracehttp.AddServer` 添加即可。
+
+#### 退出或者重启服务
+* 重启：`kill -HUP pid`
+* 退出：`kill -QUIT pid`
 
 ### 添加自定义日志组件
 ```go
