@@ -9,12 +9,19 @@ import (
 )
 
 var (
-	srvM  *sync.Mutex
-	srvWg sync.WaitGroup
+	srvM                *sync.Mutex
+	srvWg               sync.WaitGroup
+	maxListenConnection int
 )
 
 func init() {
 	srvM = new(sync.Mutex)
+	maxListenConnection = 100000 // concurrent connections for single server, default c100k
+}
+
+// 设置单个 server 最大并发链接数
+func SetMaxConcurrentForOneServer(max int) {
+	maxListenConnection = max
 }
 
 func AddServer(srv *http.Server, isTLS bool, certFile, keyFile string) *Server {
@@ -39,8 +46,13 @@ func dispatchSrvId() int {
 
 func Run() {
 	defer func() {
-		srvWg.Wait()
+		if err := recover(); err != nil {
+			panic(err)
+		} else {
+			srvWg.Wait()
+		}
 	}()
+
 	for _, srv := range gracefulSrv.srvList {
 		srvWg.Add(1)
 		srv.Run()

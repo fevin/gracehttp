@@ -60,7 +60,7 @@ func (srv *Server) ListenAndServe() {
 		srvLog.Error(fmt.Sprintf("Get listener fail. err:", err))
 		return
 	}
-	srv.oriListener = newListener(ln)
+	srv.oriListener = newListener(ln, maxListenConnection)
 	srv.listener = srv.oriListener
 	go srv.Serve()
 }
@@ -93,7 +93,7 @@ func (srv *Server) ListenAndServeTLS() {
 		return
 	}
 
-	srv.oriListener = newListener(ln)
+	srv.oriListener = newListener(ln, maxListenConnection)
 	srv.listener = tls.NewListener(srv.oriListener, config)
 	go srv.Serve()
 }
