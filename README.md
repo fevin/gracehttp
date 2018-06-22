@@ -1,4 +1,6 @@
 # gracehttp
+优雅的使用 `HTTP Server`
+
 ## 支持功能
 1. 平滑重启（`Zero-Downtime`）；
 2. 平滑关闭；
@@ -32,7 +34,7 @@
 		Handler: sc,
 	}
 	gracehttp.AddServer(srv2, true, "../config/https.crt", "../config/https.key")
-    gracehttp.SetMaxConcurrentForOneServer(1) // 限制同时只能处理一个链接
+    	gracehttp.SetMaxConcurrentForOneServer(1) // 限制同时只能处理一个链接
 
 	gracehttp.Run() // 此方法会阻塞，直到所有的 HTTP 服务退出
 ```
