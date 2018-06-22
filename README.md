@@ -7,8 +7,17 @@
 5. 支持单个端口 server 链接数限流，默认值为：C100K。超过该限制之后，拒绝服务，避免发生雪崩，压坏服务。
 
 ## 使用指南
+`go get github.com/fevin/gracehttp`
+
 ### 添加服务
 ```go
+    import (
+        "github.com/fevin/gracehttp"
+        "http"
+    )
+
+    // ...
+
     // http
 	srv1 := &http.Server{
 		Addr:    ":80",
