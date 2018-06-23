@@ -17,13 +17,12 @@ type GracefulServer struct {
 
 // 支持优雅重启的http服务
 type Server struct {
-	id          int
-	httpServer  *http.Server
-	listener    net.Listener
-	oriListener net.Listener
-	isTLS       bool
-	certFile    string
-	keyFile     string
+	id         int
+	httpServer *http.Server
+	listener   net.Listener
+	isTLS      bool
+	certFile   string
+	keyFile    string
 }
 
 var (
@@ -57,11 +56,9 @@ func (srv *Server) ListenAndServe() {
 
 	ln, err := srv.getNetTCPListener(addr, srv.id)
 	if err != nil {
-		srvLog.Error(fmt.Sprintf("Get listener fail. err:", err))
-		return
+		panic(fmt.Sprintf("Get listener fail. err:", err))
 	}
-	srv.oriListener = newListener(ln, maxListenConnection)
-	srv.listener = srv.oriListener
+	srv.listener = newListener(ln, maxListenConnection)
 	go srv.Serve()
 }
 
@@ -83,24 +80,21 @@ func (srv *Server) ListenAndServeTLS() {
 	config.Certificates = make([]tls.Certificate, 1)
 	config.Certificates[0], err = tls.LoadX509KeyPair(srv.certFile, srv.keyFile)
 	if err != nil {
-		srvLog.Error(fmt.Sprintf("tls load fail. err:", err))
-		return
+		panic(fmt.Sprintf("tls load fail. err:", err))
 	}
 
 	ln, err := srv.getNetTCPListener(addr, srv.id)
 	if err != nil {
-		srvLog.Error(fmt.Sprintf("Get listener fail. err:", err))
-		return
+		panic(fmt.Sprintf("Get listener fail. err:", err))
 	}
 
-	srv.oriListener = newListener(ln, maxListenConnection)
-	srv.listener = tls.NewListener(srv.oriListener, config)
+	srv.listener = tls.NewListener(newListener(ln, maxListenConnection), config)
 	go srv.Serve()
 }
 
 func (srv *Server) Serve() {
 	if err := srv.httpServer.Serve(srv.listener); err != nil && err != http.ErrServerClosed {
-		srvLog.Error(fmt.Sprintf("srv err:%v, [pid:%d, srvid:%d, srvAddr:%v]", err, os.Getpid(), srv.id, srv.httpServer.Addr))
+		panic(fmt.Sprintf("srv err:%v, [pid:%d, srvid:%d, srvAddr:%v]", err, os.Getpid(), srv.id, srv.httpServer.Addr))
 	}
 }
 
@@ -140,17 +134,16 @@ func startNewProcess() {
 
 	// 获取 fds
 	fds := []uintptr{os.Stdin.Fd(), os.Stdout.Fd(), os.Stderr.Fd()}
-	var listener *Listener
 	for _, srv := range gracefulSrv.srvList {
-		if srv.isTLS {
-			listener = srv.oriListener.(*Listener)
-		} else {
-			listener = srv.listener.(*Listener)
+		if srv.listener == nil {
+			panic(fmt.Sprintf("srv.listener cannot be nil!id:%v, isTLS:%v", srv.id, srv.isTLS))
 		}
-		srvFd, err := listener.Fd()
+
+		srvFd, err := srv.listener.(*Listener).Fd()
 		if err != nil {
-			srvLog.Error(fmt.Sprintf("when start new pro, get listener fd fail. err:", err))
+			panic(fmt.Sprintf("when start new pro, get listener fd fail. err:", err))
 		}
+
 		fds = append(fds, srvFd)
 	}
 

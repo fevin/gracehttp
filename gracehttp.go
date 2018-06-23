@@ -54,8 +54,8 @@ func Run() {
 	}()
 
 	for _, srv := range gracefulSrv.srvList {
-		srvWg.Add(1)
 		srv.Run()
+		srvWg.Add(1)
 	}
 }
 
