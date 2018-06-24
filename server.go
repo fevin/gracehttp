@@ -135,10 +135,6 @@ func startNewProcess() {
 	// 获取 fds
 	fds := []uintptr{os.Stdin.Fd(), os.Stdout.Fd(), os.Stderr.Fd()}
 	for _, srv := range gracefulSrv.srvList {
-		if srv.listener == nil {
-			panic(fmt.Sprintf("srv.listener cannot be nil!id:%v, isTLS:%v", srv.id, srv.isTLS))
-		}
-
 		srvFd, err := srv.listener.(*Listener).Fd()
 		if err != nil {
 			panic(fmt.Sprintf("when start new pro, get listener fd fail. err:", err))
