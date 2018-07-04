@@ -1,6 +1,9 @@
 # gracehttp
 优雅的使用 `HTTP Server`
 
+## 环境
+* Go 1.9+
+
 ## 支持功能
 1. 平滑重启（`Zero-Downtime`）；
 2. 平滑关闭；
