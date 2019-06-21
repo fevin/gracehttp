@@ -80,12 +80,14 @@
 package main
 
 import (
+    "flag"
     "fmt"
     "github.com/fevin/gracehttp"
     "net/http"
 )
 
 func main() {
+    flag.Parse()
     sc := &Controller{}
     srv1 := &http.Server{
         Addr:    ":9090",
