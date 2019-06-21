@@ -29,9 +29,6 @@
 
     // ...
 
-    // 必须解析 flag，因为平滑重启时，会通过自动添加 flag 参数来进行判断 
-    flag.Parse()
-
     // http
     srv1 := &http.Server{
         Addr:    ":80",
