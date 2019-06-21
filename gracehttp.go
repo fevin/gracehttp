@@ -2,6 +2,7 @@ package gracehttp
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -52,6 +53,10 @@ func Run() {
 			srvWg.Wait()
 		}
 	}()
+
+	if flag.Parsed() {
+		flag.Parse()
+	}
 
 	for _, srv := range gracefulSrv.srvList {
 		srv.Run()
