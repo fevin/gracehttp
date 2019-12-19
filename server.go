@@ -11,8 +11,9 @@ import (
 )
 
 type GracefulServer struct {
-	srvList    []*Server
-	signalChan chan os.Signal
+	srvList       []*Server
+	srvSucessList []*Server
+	signalChan    chan os.Signal
 }
 
 // 支持优雅重启的http服务
@@ -40,15 +41,15 @@ func init() {
 	go handleSignals()
 }
 
-func (srv *Server) Run() {
+func (srv *Server) Run() error {
 	if srv.isTLS {
-		srv.ListenAndServeTLS()
+		return srv.ListenAndServeTLS()
 	} else {
-		srv.ListenAndServe()
+		return srv.ListenAndServe()
 	}
 }
 
-func (srv *Server) ListenAndServe() {
+func (srv *Server) ListenAndServe() error {
 	addr := srv.httpServer.Addr
 	if addr == "" {
 		addr = ":http"
@@ -56,13 +57,14 @@ func (srv *Server) ListenAndServe() {
 
 	ln, err := srv.getNetTCPListener(addr, srv.id)
 	if err != nil {
-		panic(fmt.Sprintf("Get listener fail. err:", err))
+		return err
 	}
 	srv.listener = newListener(ln, maxListenConnection)
 	go srv.Serve()
+	return nil
 }
 
-func (srv *Server) ListenAndServeTLS() {
+func (srv *Server) ListenAndServeTLS() error {
 	addr := srv.httpServer.Addr
 	if addr == "" {
 		addr = ":https"
@@ -80,16 +82,17 @@ func (srv *Server) ListenAndServeTLS() {
 	config.Certificates = make([]tls.Certificate, 1)
 	config.Certificates[0], err = tls.LoadX509KeyPair(srv.certFile, srv.keyFile)
 	if err != nil {
-		panic(fmt.Sprintf("tls load fail. err:", err))
+		return err
 	}
 
 	ln, err := srv.getNetTCPListener(addr, srv.id)
 	if err != nil {
-		panic(fmt.Sprintf("Get listener fail. err:", err))
+		return err
 	}
 
 	srv.listener = tls.NewListener(newListener(ln, maxListenConnection), config)
 	go srv.Serve()
+	return nil
 }
 
 func (srv *Server) Serve() {
@@ -121,7 +124,7 @@ func (srv *Server) getNetTCPListener(addr string, connOrder int) (*net.TCPListen
 }
 
 // 启动子进程执行新程序
-func startNewProcess() {
+func startNewProcess() error {
 	// 获取 args
 	var args []string
 	for _, arg := range os.Args {
@@ -137,7 +140,8 @@ func startNewProcess() {
 	for _, srv := range gracefulSrv.srvList {
 		srvFd, err := srv.listener.(*Listener).Fd()
 		if err != nil {
-			panic(fmt.Sprintf("when start new pro, get listener fd fail. err:", err))
+			srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
+			return err
 		}
 
 		fds = append(fds, srvFd)
@@ -153,4 +157,5 @@ func startNewProcess() {
 		srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
 	}
 	srvLog.Info(fmt.Sprintf("start new process success, pid %d.", forkId))
+	return nil
 }

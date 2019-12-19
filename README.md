@@ -19,6 +19,19 @@
 ## 使用指南
 `go get github.com/fevin/gracehttp`
 
+**单元测试**
+```
+go test -v github.com/fevin/gracehttp
+=== RUN   TestHTTPServer
+--- PASS: TestHTTPServer (0.00s)
+    gracehttp_test.go:57: ======== test http server 1 ========
+    gracehttp_test.go:67: http server 1 success, response: pong
+    gracehttp_test.go:72: ======== test http server 2 ========
+    gracehttp_test.go:82: http server 2 success, response: pong
+PASS
+ok  	github.com/fevin/gracehttp	0.016s
+```
+
 ### 添加服务
 ```go
     import (

@@ -45,7 +45,7 @@ func dispatchSrvId() int {
 	return id
 }
 
-func Run() {
+func Run() error {
 	defer func() {
 		if err := recover(); err != nil {
 			panic(err)
@@ -59,13 +59,18 @@ func Run() {
 	}
 
 	for _, srv := range gracefulSrv.srvList {
-		srv.Run()
+		if err := srv.Run(); err != nil {
+			shutdown()
+			return err
+		}
+		gracefulSrv.srvSucessList = append(gracefulSrv.srvSucessList, srv)
 		srvWg.Add(1)
 	}
+	return nil
 }
 
 func shutdown() {
-	for _, srv := range gracefulSrv.srvList {
+	for _, srv := range gracefulSrv.srvSucessList {
 		if err := srv.httpServer.Shutdown(context.Background()); err != nil {
 			srvLog.Error(fmt.Sprintf("srv  closed fail, [pid:%d, srvrd:%d]", os.Getpid(), srv.id))
 		}
