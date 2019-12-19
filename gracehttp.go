@@ -54,7 +54,7 @@ func Run() error {
 		}
 	}()
 
-	if flag.Parsed() {
+	if !flag.Parsed() {
 		flag.Parse()
 	}
 
