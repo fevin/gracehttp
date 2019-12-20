@@ -12,7 +12,7 @@ var notifySignals []os.Signal
 
 func init() {
 	sig = make(chan os.Signal)
-	notifySignals = append(notifySignals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGTSTP, syscall.SIGQUIT)
+	notifySignals = append(notifySignals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGTSTP, syscall.SIGQUIT, syscall.SIGUSR1)
 	signal.Notify(sig, notifySignals...)
 }
 
@@ -22,6 +22,7 @@ func handleSignals() {
 	srvLog.Info(fmt.Sprintf("Received SIG. [PID:%d, SIG:%v]", syscall.Getpid(), capturedSig))
 	switch capturedSig {
 	case syscall.SIGHUP:
+	case syscall.SIGUSR1:
 		startNewProcess()
 		shutdown()
 	case syscall.SIGINT:

@@ -2,13 +2,25 @@ package gracehttp
 
 import (
 	"crypto/tls"
-	"flag"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"syscall"
 )
+
+var (
+	gracefulSrv *GracefulServer
+	nextSrvId   int
+)
+
+func init() {
+	gracefulSrv = new(GracefulServer)
+	nextSrvId = 1
+
+	// 处理信号
+	go handleSignals()
+}
 
 type GracefulServer struct {
 	srvList       []*Server
@@ -24,21 +36,6 @@ type Server struct {
 	isTLS      bool
 	certFile   string
 	keyFile    string
-}
-
-var (
-	gracefulSrv *GracefulServer
-	isChild     bool
-	nextSrvId   int
-)
-
-func init() {
-	flag.BoolVar(&isChild, "continue", false, "listen on open fd (after forking)")
-	gracefulSrv = new(GracefulServer)
-	nextSrvId = 1
-
-	// 处理信号
-	go handleSignals()
 }
 
 func (srv *Server) Run() error {
@@ -106,7 +103,7 @@ func (srv *Server) getNetTCPListener(addr string, connOrder int) (*net.TCPListen
 	var ln net.Listener
 	var err error
 
-	if isChild {
+	if isRestartEnv(addr) {
 		file := os.NewFile(uintptr(connOrder+2), "") // 此处加 2，因为 0/1/2 分别对应标准输入/输出/错误
 		ln, err = net.FileListener(file)
 		if err != nil {
@@ -128,12 +125,8 @@ func startNewProcess() error {
 	// 获取 args
 	var args []string
 	for _, arg := range os.Args {
-		if arg == "-continue" {
-			break
-		}
 		args = append(args, arg)
 	}
-	args = append(args, "-continue")
 
 	// 获取 fds
 	fds := []uintptr{os.Stdin.Fd(), os.Stdout.Fd(), os.Stderr.Fd()}
@@ -143,6 +136,7 @@ func startNewProcess() error {
 			srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
 			return err
 		}
+		setRestartEnv(srv.httpServer.Addr)
 
 		fds = append(fds, srvFd)
 	}

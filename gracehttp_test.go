@@ -2,9 +2,12 @@ package gracehttp
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"syscall"
 	"testing"
+	_ "time"
 )
 
 var (
@@ -25,7 +28,7 @@ type Controller struct {
 
 func (this *Controller) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	if req.URL.Path == "/ping" {
-		resp.Write([]byte("pong"))
+		resp.Write([]byte(fmt.Sprintf("pong by pid:%d", syscall.Getpid())))
 	} else {
 		resp.Write([]byte("unknown"))
 	}
@@ -53,8 +56,8 @@ func TestHTTPServer(t *testing.T) {
 	go runServer(t)
 	<-runChan
 
-	{
-		t.Log("======== test http server 1 ========")
+	testServer1 := func() {
+		t.Log("[test http server 1]")
 		resp, err := http.Get("http://localhost:" + httpPort1 + "/ping")
 		if err != nil {
 			t.Fatal("http server 1 error:", err)
@@ -68,8 +71,8 @@ func TestHTTPServer(t *testing.T) {
 		}
 	}
 
-	{
-		t.Log("======== test http server 2 ========")
+	testServer2 := func() {
+		t.Log("[test http server 2]")
 		resp, err := http.Get("http://localhost:" + httpPort2 + "/ping")
 		if err != nil {
 			t.Fatal("http server 2 error:", err)
@@ -82,4 +85,15 @@ func TestHTTPServer(t *testing.T) {
 			t.Log("http server 2 success, response:", string(data))
 		}
 	}
+
+	t.Log("******* test multi server  *******")
+	testServer1()
+	testServer2()
+
+	// t.Log("******* test grace restart *******")
+	// pid := syscall.Getpid()
+	// syscall.Kill(pid, syscall.SIGUSR1)
+	// time.Sleep(time.Second)
+	// testServer1()
+	// testServer2()
 }
