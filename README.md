@@ -99,7 +99,7 @@ PASS
 ok  	github.com/fevin/gracehttp	0.016s
 ```
 
-### 平滑测试
+### 平滑重启功能测试
 ```
 ✗ export $GOPATH=$YOUR_PROGRAM
 ✗ export $GOBIN=$YOUR_PROGRAM/bin
@@ -127,5 +127,5 @@ pong by pid:86818
 ```
 
 ---
-@see test `./gracehttp_test.go`
+@see test `./gracehttp_test.go`    
 @see demo `./main_test/gracehttp_main.go`
