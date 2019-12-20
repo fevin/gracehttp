@@ -19,19 +19,6 @@
 ## 使用指南
 `go get github.com/fevin/gracehttp`
 
-**单元测试**
-```
-go test -v github.com/fevin/gracehttp
-=== RUN   TestHTTPServer
---- PASS: TestHTTPServer (0.00s)
-    gracehttp_test.go:57: ======== test http server 1 ========
-    gracehttp_test.go:67: http server 1 success, response: pong
-    gracehttp_test.go:72: ======== test http server 2 ========
-    gracehttp_test.go:82: http server 2 success, response: pong
-PASS
-ok  	github.com/fevin/gracehttp	0.016s
-```
-
 ### 添加服务
 ```go
     import (
@@ -64,7 +51,7 @@ ok  	github.com/fevin/gracehttp	0.016s
 如上所示，只需创建好 `Server` 对象，调用 `gracehttp.AddServer` 添加即可。
 
 #### 退出或者重启服务
-* 重启：`kill -HUP pid`
+* 重启：`kill -HUP pid` 或 `kill -USR1 pid`
 * 退出：`kill -QUIT pid`
 
 ### 添加自定义日志组件
@@ -84,44 +71,48 @@ ok  	github.com/fevin/gracehttp	0.016s
 2. 只有获取 `buffer` 的请求才能进行 `accept`；
 3. 如果缓冲区满了，后来的请求会阻塞，直到 `conn.close` 或者 缓冲区有空闲
 
----
-@see `gracehttp_test.go`
 
-## DEMO
-`vim main.go`
-```go
-package main
-
-import (
-    "flag"
-    "fmt"
-    "github.com/fevin/gracehttp"
-    "net/http"
-)
-
-func main() {
-    flag.Parse()
-    sc := &Controller{}
-    srv1 := &http.Server{
-        Addr:    ":9090",
-        Handler: sc,
-    }
-    gracehttp.AddServer(srv1, false, "", "")
-    srv2 := &http.Server{
-        Addr:    ":9091",
-        Handler: sc,
-    }
-    gracehttp.AddServer(srv2, false, "", "")
-    gracehttp.SetMaxConcurrentForOneServer(1)
-    gracehttp.Run()
-
-    fmt.Print("main over")
-}
-
-type Controller struct {
-}
-
-func (this *Controller) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-    resp.Write([]byte("hello01"))
-}
+## 测试
+### HTTP Server 常规测试
 ```
+go test -v github.com/fevin/gracehttp
+=== RUN   TestHTTPServer
+--- PASS: TestHTTPServer (0.00s)
+    gracehttp_test.go:57: ======== test http server 1 ========
+    gracehttp_test.go:67: http server 1 success, response: pong
+    gracehttp_test.go:72: ======== test http server 2 ========
+    gracehttp_test.go:82: http server 2 success, response: pong
+PASS
+ok  	github.com/fevin/gracehttp	0.016s
+```
+
+### 平滑测试
+```
+✗ export $GOPATH=$YOUR_PROGRAM
+✗ export $GOBIN=$YOUR_PROGRAM/bin
+✗ go get github.com/fevin/gracehttp
+✗ go install $YOUR_PROGRAM/src/github.com/fevin/gracehttp/main_test/gracehttp_main.go
+✗ nohup ./gracehttp_main 2>&1 > gracehttp.log &
+
+✗ curl http://localhost:9090/ping
+pong by pid:86703
+✗ kill -USR1 86703
+[1]  + 86703 done       nohup ./bin/gracehttp_main 2>&1 > gracehttp.log
+✗ cat gracehttp.log
+2019/12/20 12:07:38 [gracehtto-log][Info] [Received SIG. [PID:86703, SIG:user defined signal 1]]
+2019/12/20 12:07:38 [gracehtto-log][Info] [start new process success, pid 86818.]
+
+# 再次执行 curl，发现 pid 已经变化
+✗ curl http://localhost:9090/ping
+pong by pid:86818
+
+✗ kill -QUIT 86818
+✗ cat gracehttp.log
+2019/12/20 12:07:38 [gracehtto-log][Info] [Received SIG. [PID:86703, SIG:user defined signal 1]]
+2019/12/20 12:07:38 [gracehtto-log][Info] [start new process success, pid 86818.]
+2019/12/20 12:08:56 [gracehtto-log][Info] [Received SIG. [PID:86818, SIG:quit]]
+```
+
+---
+@see test `./gracehttp_test.go`
+@see demo `./main_test/gracehttp_main.go`
