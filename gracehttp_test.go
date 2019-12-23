@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"syscall"
 	"testing"
-	_ "time"
+	"time"
 )
 
 var (
@@ -35,19 +35,36 @@ func (this *Controller) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 }
 
 func runServer(t *testing.T) {
-	sc := &Controller{}
-	srv1 := &http.Server{
-		Addr:    ":" + httpPort1,
-		Handler: sc,
+	hd := &Controller{}
+	grace := NewGraceHTTP()
+
+	{
+		srv1 := &http.Server{
+			Addr:         ":" + httpPort1,
+			Handler:      hd,
+			ReadTimeout:  time.Duration(time.Second),
+			WriteTimeout: time.Duration(time.Second),
+		}
+		option := &ServerOption{
+			HTTPServer: srv1,
+		}
+		grace.AddServer(option)
 	}
-	AddServer(srv1, false, "", "")
-	srv2 := &http.Server{
-		Addr:    ":" + httpPort2,
-		Handler: sc,
+
+	{
+		srv2 := &http.Server{
+			Addr:         ":" + httpPort2,
+			Handler:      hd,
+			ReadTimeout:  time.Duration(time.Second),
+			WriteTimeout: time.Duration(time.Second),
+		}
+		option := &ServerOption{
+			HTTPServer: srv2,
+		}
+		grace.AddServer(option)
 	}
-	AddServer(srv2, false, "", "")
 	runChan <- struct{}{}
-	if err := Run(); err != nil {
+	if err := grace.Run(); err != nil {
 		t.Fatal(err)
 	}
 }

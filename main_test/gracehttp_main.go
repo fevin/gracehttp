@@ -6,6 +6,7 @@ import (
 	"github.com/fevin/gracehttp"
 	"net/http"
 	"syscall"
+	"time"
 )
 
 var (
@@ -18,12 +19,19 @@ func init() {
 
 func main() {
 	hd := &Controller{}
+	grace := gracehttp.NewGraceHTTP()
 	srv := &http.Server{
-		Addr:    ":" + httpPort,
-		Handler: hd,
+		Addr:         ":" + httpPort,
+		Handler:      hd,
+		ReadTimeout:  time.Duration(time.Second),
+		WriteTimeout: time.Duration(time.Second),
 	}
-	gracehttp.AddServer(srv, false, "", "")
-	if err := gracehttp.Run(); err != nil {
+	option := &gracehttp.ServerOption{
+		HTTPServer:          srv,
+		MaxListenConnection: 1000, // 限制 server 连接数
+	}
+	grace.AddServer(option)
+	if err := grace.Run(); err != nil {
 		fmt.Println(err)
 	}
 }

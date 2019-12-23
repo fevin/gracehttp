@@ -33,35 +33,7 @@
 `go get github.com/fevin/gracehttp`
 
 ### 添加服务
-```go
-    import (
-        "flag"
-        "github.com/fevin/gracehttp"
-        "http"
-    )
-
-    // ...
-
-    // http
-    srv1 := &http.Server{
-        Addr:    ":80",
-        Handler: sc,
-    }
-    gracehttp.AddServer(srv1, false, "", "")
-
-    // https
-    srv2 := &http.Server{
-        Addr:    ":443",
-        Handler: sc,
-    }
-    gracehttp.AddServer(srv2, true, "../config/https.crt", "../config/https.key")
-
-    gracehttp.SetMaxConcurrentForOneServer(1) // 限制同时只能处理一个链接
-
-    gracehttp.Run() // 此方法会阻塞，直到所有的 HTTP 服务退出
-```
-
-如上所示，只需创建好 `Server` 对象，调用 `gracehttp.AddServer` 添加即可。
+@see `main_test/gracehttp_main.go`
 
 #### 退出或者重启服务
 * 重启：`kill -HUP pid` 或 `kill -USR1 pid`
@@ -88,13 +60,14 @@
 ## 测试
 ### HTTP Server 常规测试
 ```
-go test -v github.com/fevin/gracehttp
+✗ go test -v github.com/fevin/gracehttp
 === RUN   TestHTTPServer
 --- PASS: TestHTTPServer (0.00s)
-    gracehttp_test.go:57: ======== test http server 1 ========
-    gracehttp_test.go:67: http server 1 success, response: pong
-    gracehttp_test.go:72: ======== test http server 2 ========
-    gracehttp_test.go:82: http server 2 success, response: pong
+    gracehttp_test.go:106: ******* test multi server  *******
+    gracehttp_test.go:77: [test http server 1]
+    gracehttp_test.go:87: http server 1 success, response: pong by pid:5385
+    gracehttp_test.go:92: [test http server 2]
+    gracehttp_test.go:102: http server 2 success, response: pong by pid:5385
 PASS
 ok  	github.com/fevin/gracehttp	0.016s
 ```

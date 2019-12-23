@@ -1,75 +1,99 @@
 package gracehttp
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
-	"syscall"
+	"sync"
 )
 
-var (
-	gracefulSrv *GracefulServer
-	nextSrvId   int
-)
-
-func init() {
-	gracefulSrv = new(GracefulServer)
-	nextSrvId = 1
-
-	// 处理信号
-	go handleSignals()
-}
-
-type GracefulServer struct {
+type gracefulServer struct {
 	srvList       []*Server
 	srvSucessList []*Server
+	srvWg         sync.WaitGroup
 	signalChan    chan os.Signal
+}
+
+func (this *gracefulServer) AddServer(srv *Server) {
+	this.srvList = append(this.srvList, srv)
+}
+
+func (this *gracefulServer) WaitAllServer() {
+	this.srvWg.Wait()
+}
+
+func (this *gracefulServer) AsyncRunAllServer() error {
+	for _, srv := range this.srvList {
+		if err := srv.Run(); err != nil {
+			this.shutdownAllServer()
+			return err
+		}
+		this.addSucessfulServer(srv)
+	}
+
+	return nil
+}
+
+func (this *gracefulServer) addSucessfulServer(srv *Server) {
+	this.srvSucessList = append(this.srvSucessList, srv)
+	this.srvWg.Add(1)
+}
+
+func (this *gracefulServer) shutdownAllServer() {
+	for _, srv := range this.srvSucessList {
+		if err := srv.Shutdown(context.Background()); err != nil {
+			srvLog.Error(fmt.Sprintf("srv  closed fail, [pid:%d, srvrd:%d]", os.Getpid(), srv.id))
+		}
+		this.srvWg.Done()
+	}
+	this.srvSucessList = this.srvSucessList[:0]
 }
 
 // 支持优雅重启的http服务
 type Server struct {
-	id         int
-	httpServer *http.Server
-	listener   net.Listener
-	isTLS      bool
-	certFile   string
-	keyFile    string
+	*ServerOption
+	id       int
+	listener net.Listener
 }
 
-func (srv *Server) Run() error {
-	if srv.isTLS {
-		return srv.ListenAndServeTLS()
+func (this *Server) getAddr() string {
+	return this.HTTPServer.Addr
+}
+
+func (this *Server) Run() error {
+	if this.IsTLS {
+		return this.ListenAndServeTLS()
 	} else {
-		return srv.ListenAndServe()
+		return this.ListenAndServe()
 	}
 }
 
-func (srv *Server) ListenAndServe() error {
-	addr := srv.httpServer.Addr
-	if addr == "" {
-		addr = ":http"
+func (this *Server) ListenAndServe() error {
+	if this.getAddr() == "" {
+		return errors.New("http port must be set!")
 	}
 
-	ln, err := srv.getNetTCPListener(addr, srv.id)
+	ln, err := this.getNetTCPListener()
 	if err != nil {
 		return err
 	}
-	srv.listener = newListener(ln, maxListenConnection)
-	go srv.Serve()
+	this.listener = newListener(ln, this.MaxListenConnection)
+	go this.Serve()
 	return nil
 }
 
-func (srv *Server) ListenAndServeTLS() error {
-	addr := srv.httpServer.Addr
-	if addr == "" {
-		addr = ":https"
+func (this *Server) ListenAndServeTLS() error {
+	if this.getAddr() == "" {
+		return errors.New("https port must be set!")
 	}
 
 	config := &tls.Config{}
-	if srv.httpServer.TLSConfig != nil {
-		*config = *srv.httpServer.TLSConfig
+	if this.HTTPServer.TLSConfig != nil {
+		*config = *this.HTTPServer.TLSConfig
 	}
 	if config.NextProtos == nil {
 		config.NextProtos = []string{"http/1.1"}
@@ -77,79 +101,49 @@ func (srv *Server) ListenAndServeTLS() error {
 
 	var err error
 	config.Certificates = make([]tls.Certificate, 1)
-	config.Certificates[0], err = tls.LoadX509KeyPair(srv.certFile, srv.keyFile)
+	config.Certificates[0], err = tls.LoadX509KeyPair(this.CertFile, this.KeyFile)
 	if err != nil {
 		return err
 	}
 
-	ln, err := srv.getNetTCPListener(addr, srv.id)
+	ln, err := this.getNetTCPListener()
 	if err != nil {
 		return err
 	}
 
-	srv.listener = tls.NewListener(newListener(ln, maxListenConnection), config)
-	go srv.Serve()
+	this.listener = tls.NewListener(newListener(ln, this.MaxListenConnection), config)
+	go this.Serve()
 	return nil
 }
 
-func (srv *Server) Serve() {
-	if err := srv.httpServer.Serve(srv.listener); err != nil && err != http.ErrServerClosed {
-		panic(fmt.Sprintf("srv err:%v, [pid:%d, srvid:%d, srvAddr:%v]", err, os.Getpid(), srv.id, srv.httpServer.Addr))
+func (this *Server) Serve() {
+	if err := this.HTTPServer.Serve(this.listener); err != nil && err != http.ErrServerClosed {
+		panic(fmt.Sprintf("srv err:%v, [pid:%d, srvid:%d, srvAddr:%v]", err, os.Getpid(), this.id, this.getAddr()))
 	}
 }
 
-func (srv *Server) getNetTCPListener(addr string, connOrder int) (*net.TCPListener, error) {
+func (this *Server) Shutdown(ctx context.Context) error {
+	return this.HTTPServer.Shutdown(ctx)
+}
+
+func (this *Server) getNetTCPListener() (*net.TCPListener, error) {
 
 	var ln net.Listener
 	var err error
 
-	if isRestartEnv(addr) {
-		file := os.NewFile(uintptr(connOrder+2), "") // 此处加 2，因为 0/1/2 分别对应标准输入/输出/错误
+	if isRestartEnv(this.getAddr()) {
+		file := os.NewFile(uintptr(this.id+2), "") // 此处加 2，因为 0/1/2 分别对应标准输入/输出/错误
 		ln, err = net.FileListener(file)
 		if err != nil {
 			err = fmt.Errorf("net.FileListener error: %v", err)
 			return nil, err
 		}
 	} else {
-		ln, err = net.Listen("tcp", addr)
+		ln, err = net.Listen("tcp", this.getAddr())
 		if err != nil {
 			err = fmt.Errorf("net.Listen error: %v", err)
 			return nil, err
 		}
 	}
 	return ln.(*net.TCPListener), nil
-}
-
-// 启动子进程执行新程序
-func startNewProcess() error {
-	// 获取 args
-	var args []string
-	for _, arg := range os.Args {
-		args = append(args, arg)
-	}
-
-	// 获取 fds
-	fds := []uintptr{os.Stdin.Fd(), os.Stdout.Fd(), os.Stderr.Fd()}
-	for _, srv := range gracefulSrv.srvList {
-		srvFd, err := srv.listener.(*Listener).Fd()
-		if err != nil {
-			srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
-			return err
-		}
-		setRestartEnv(srv.httpServer.Addr)
-
-		fds = append(fds, srvFd)
-	}
-
-	execSpec := &syscall.ProcAttr{
-		Env:   os.Environ(),
-		Files: fds,
-	}
-
-	forkId, err := syscall.ForkExec(os.Args[0], args, execSpec)
-	if err != nil {
-		srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
-	}
-	srvLog.Info(fmt.Sprintf("start new process success, pid %d.", forkId))
-	return nil
 }

@@ -1,42 +1,22 @@
 package gracehttp
 
 import (
-	"context"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 )
 
 var (
-	srvM                *sync.Mutex
-	srvWg               sync.WaitGroup
-	maxListenConnection int
+	nextSrvId     int
+	notifySignals []os.Signal
 )
 
 func init() {
-	srvM = new(sync.Mutex)
-	maxListenConnection = 100000 // concurrent connections for single server, default c100k
-}
-
-// 设置单个 server 最大并发链接数
-func SetMaxConcurrentForOneServer(max int) {
-	maxListenConnection = max
-}
-
-func AddServer(srv *http.Server, isTLS bool, certFile, keyFile string) *Server {
-	srvM.Lock()
-	defer srvM.Unlock()
-	pSrv := &Server{
-		id:         dispatchSrvId(),
-		httpServer: srv,
-		isTLS:      isTLS,
-		certFile:   certFile,
-		keyFile:    keyFile,
-	}
-	gracefulSrv.srvList = append(gracefulSrv.srvList, pSrv)
-	return pSrv
+	nextSrvId = 1
+	notifySignals = append(notifySignals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGTSTP, syscall.SIGQUIT, syscall.SIGUSR1)
 }
 
 func dispatchSrvId() int {
@@ -45,12 +25,40 @@ func dispatchSrvId() int {
 	return id
 }
 
-func Run() error {
+func NewGraceHTTP() *GraceHTTP {
+	grace := new(GraceHTTP)
+	grace.server = new(gracefulServer)
+	grace.sig = make(chan os.Signal)
+	signal.Notify(grace.sig, notifySignals...)
+
+	go grace.exitHandler()
+	return grace
+}
+
+type GraceHTTP struct {
+	serverWg sync.WaitGroup
+	server   *gracefulServer
+	sig      chan os.Signal
+}
+
+func (this *GraceHTTP) AddServer(option *ServerOption) (*Server, error) {
+	if err := option.init(); err != nil {
+		return nil, err
+	}
+	srv := &Server{
+		id:           dispatchSrvId(),
+		ServerOption: option,
+	}
+	this.server.AddServer(srv)
+	return srv, nil
+}
+
+func (this *GraceHTTP) Run() (retErr error) {
 	defer func() {
 		if err := recover(); err != nil {
 			panic(err)
 		} else {
-			srvWg.Wait()
+			this.server.WaitAllServer()
 		}
 	}()
 
@@ -58,22 +66,65 @@ func Run() error {
 		flag.Parse()
 	}
 
-	for _, srv := range gracefulSrv.srvList {
-		if err := srv.Run(); err != nil {
-			shutdown()
+	return this.server.AsyncRunAllServer()
+}
+
+func (this *GraceHTTP) exitHandler() {
+	capturedSig := <-this.sig
+	srvLog.Info(fmt.Sprintf("Received SIG. [PID:%d, SIG:%v]", syscall.Getpid(), capturedSig))
+	switch capturedSig {
+	case syscall.SIGHUP:
+	case syscall.SIGUSR1:
+		if err := this.startNewProcess(); err != nil {
+			srvLog.Error(fmt.Sprintf("Received SIG. [PID:%d, SIG:%v]", syscall.Getpid(), capturedSig))
+			return
+		}
+		this.shutdown()
+	case syscall.SIGINT:
+		fallthrough
+	case syscall.SIGTERM:
+		fallthrough
+	case syscall.SIGTSTP:
+		fallthrough
+	case syscall.SIGQUIT:
+		this.shutdown()
+	}
+}
+
+// 启动子进程执行新程序
+func (this *GraceHTTP) startNewProcess() error {
+	// 获取 args
+	var args []string
+	for _, arg := range os.Args {
+		args = append(args, arg)
+	}
+
+	// 获取 fds
+	fds := []uintptr{os.Stdin.Fd(), os.Stdout.Fd(), os.Stderr.Fd()}
+	for _, srv := range this.server.srvList {
+		srvFd, err := srv.listener.(*Listener).Fd()
+		if err != nil {
+			srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
 			return err
 		}
-		gracefulSrv.srvSucessList = append(gracefulSrv.srvSucessList, srv)
-		srvWg.Add(1)
+		setRestartEnv(srv.getAddr())
+
+		fds = append(fds, srvFd)
 	}
+
+	execSpec := &syscall.ProcAttr{
+		Env:   os.Environ(),
+		Files: fds,
+	}
+
+	forkId, err := syscall.ForkExec(os.Args[0], args, execSpec)
+	if err != nil {
+		srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
+	}
+	srvLog.Info(fmt.Sprintf("start new process success, pid %d.", forkId))
 	return nil
 }
 
-func shutdown() {
-	for _, srv := range gracefulSrv.srvSucessList {
-		if err := srv.httpServer.Shutdown(context.Background()); err != nil {
-			srvLog.Error(fmt.Sprintf("srv  closed fail, [pid:%d, srvrd:%d]", os.Getpid(), srv.id))
-		}
-		srvWg.Done()
-	}
+func (this *GraceHTTP) shutdown() {
+	this.server.shutdownAllServer()
 }
