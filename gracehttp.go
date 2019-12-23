@@ -4,23 +4,17 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
-	"runtime"
 	"sync"
-	"syscall"
 )
 
 var (
-	nextSrvId     int
-	notifySignals []os.Signal
+	nextSrvId int
 )
 
 func init() {
 	nextSrvId = 1
-	notifySignals = append(notifySignals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
-		notifySignals = append(notifySignals, syscall.SIGTSTP, syscall.SIGUSR1)
-	}
 }
 
 func dispatchSrvId() int {
@@ -74,25 +68,7 @@ func (this *GraceHTTP) Run() (retErr error) {
 }
 
 func (this *GraceHTTP) exitHandler() {
-	capturedSig := <-this.sig
-	srvLog.Info(fmt.Sprintf("Received SIG. [PID:%d, SIG:%v]", syscall.Getpid(), capturedSig))
-	switch capturedSig {
-	case syscall.SIGHUP:
-	case syscall.SIGUSR1:
-		if err := this.startNewProcess(); err != nil {
-			srvLog.Error(fmt.Sprintf("Received SIG. [PID:%d, SIG:%v]", syscall.Getpid(), capturedSig))
-			return
-		}
-		this.shutdown()
-	case syscall.SIGINT:
-		fallthrough
-	case syscall.SIGTERM:
-		fallthrough
-	case syscall.SIGTSTP:
-		fallthrough
-	case syscall.SIGQUIT:
-		this.shutdown()
-	}
+	exitForSignal(this)
 }
 
 // 启动子进程执行新程序
@@ -104,9 +80,9 @@ func (this *GraceHTTP) startNewProcess() error {
 	}
 
 	// 获取 fds
-	fds := []uintptr{os.Stdin.Fd(), os.Stdout.Fd(), os.Stderr.Fd()}
+	fds := make([]*os.File, 0, len(this.server.srvList))
 	for _, srv := range this.server.srvList {
-		srvFd, err := srv.listener.(*Listener).Fd()
+		srvFd, err := srv.listener.(*Listener).TCPListener.File()
 		if err != nil {
 			srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
 			return err
@@ -116,19 +92,27 @@ func (this *GraceHTTP) startNewProcess() error {
 		fds = append(fds, srvFd)
 	}
 
-	execSpec := &syscall.ProcAttr{
-		Env:   os.Environ(),
-		Files: fds,
-	}
-
-	forkId, err := syscall.ForkExec(os.Args[0], args, execSpec)
-	if err != nil {
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.Env = append(os.Environ())
+	cmd.ExtraFiles = fds
+	if err := cmd.Run(); err != nil {
 		srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
+		return err
+	} else {
+		srvLog.Info("start new process success")
+		return nil
 	}
-	srvLog.Info(fmt.Sprintf("start new process success, pid %d.", forkId))
-	return nil
 }
 
 func (this *GraceHTTP) shutdown() {
 	this.server.shutdownAllServer()
+}
+
+func (this *GraceHTTP) restart() error {
+	if err := this.startNewProcess(); err != nil {
+		srvLog.Error(fmt.Sprintf("restart error:%v", err))
+		return err
+	}
+	this.shutdown()
+	return nil
 }
