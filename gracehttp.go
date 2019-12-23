@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync"
 	"syscall"
 )
@@ -16,7 +17,10 @@ var (
 
 func init() {
 	nextSrvId = 1
-	notifySignals = append(notifySignals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGTSTP, syscall.SIGQUIT, syscall.SIGUSR1)
+	notifySignals = append(notifySignals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		notifySignals = append(notifySignals, syscall.SIGTSTP, syscall.SIGUSR1)
+	}
 }
 
 func dispatchSrvId() int {
