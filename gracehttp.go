@@ -78,7 +78,6 @@ func (this *GraceHTTP) exitHandler() {
 	srvLog.Info(fmt.Sprintf("Received SIG. [PID:%d, SIG:%v]", syscall.Getpid(), capturedSig))
 	switch capturedSig {
 	case syscall.SIGHUP:
-	case syscall.SIGUSR1:
 		if err := this.startNewProcess(); err != nil {
 			srvLog.Error(fmt.Sprintf("Received SIG. [PID:%d, SIG:%v]", syscall.Getpid(), capturedSig))
 			return

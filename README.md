@@ -38,7 +38,7 @@ go get github.com/fevin/gracehttp
 @see `main_test/gracehttp_main.go`
 
 #### 退出或者重启服务
-* 重启：`kill -HUP pid` 或 `kill -USR1 pid`
+* 重启：`kill -HUP pid` 或 `kill -HUP pid`
 * 退出：`kill -QUIT pid`
 
 ### 添加自定义日志组件
