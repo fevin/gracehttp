@@ -30,7 +30,9 @@
 * 对 `server` 进行过载保护，通过设置合适的阀值，避免 `too many open files` 错误；
 
 ## 使用指南
-`go get github.com/fevin/gracehttp`
+```
+go get github.com/fevin/gracehttp
+```
 
 ### 添加服务
 @see `main_test/gracehttp_main.go`
