@@ -8,19 +8,19 @@ import (
 	"time"
 )
 
-type Listener struct {
-	*net.TCPListener
-	sem       chan struct{}
-	closeOnce sync.Once     // ensures the done chan is only closed once
-	done      chan struct{} // no values sent; closed when Close is called
-}
-
-func newListener(tl *net.TCPListener, n int) net.Listener {
+func newListener(tl *net.TCPListener, n int) *Listener {
 	return &Listener{
 		TCPListener: tl,
 		sem:         make(chan struct{}, n),
 		done:        make(chan struct{}),
 	}
+}
+
+type Listener struct {
+	*net.TCPListener
+	sem       chan struct{}
+	closeOnce sync.Once     // ensures the done chan is only closed once
+	done      chan struct{} // no values sent; closed when Close is called
 }
 
 func (l *Listener) Fd() (uintptr, error) {

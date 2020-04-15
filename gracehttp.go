@@ -106,14 +106,8 @@ func (this *GraceHTTP) startNewProcess() error {
 	// 获取 fds
 	fds := []uintptr{os.Stdin.Fd(), os.Stdout.Fd(), os.Stderr.Fd()}
 	for _, srv := range this.server.srvList {
-		srvFd, err := srv.listener.(*Listener).Fd()
-		if err != nil {
-			srvLog.Error(fmt.Sprintf("failed to forkexec: %v", err))
-			return err
-		}
 		setRestartEnv(srv.getAddr())
-
-		fds = append(fds, srvFd)
+		fds = append(fds, srv.fd)
 	}
 
 	execSpec := &syscall.ProcAttr{

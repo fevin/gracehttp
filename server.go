@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -57,6 +58,7 @@ func (this *gracefulServer) shutdownAllServer() {
 type Server struct {
 	*ServerOption
 	id       int
+	fd       uintptr
 	listener net.Listener
 }
 
@@ -81,7 +83,14 @@ func (this *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
-	this.listener = newListener(ln, this.MaxListenConnection)
+
+	wrapListener := newListener(ln, this.MaxListenConnection)
+	lnFd, fdErr := wrapListener.Fd()
+	if fdErr != nil {
+		log.Panicf("get listener fd error:%v", fdErr)
+	}
+	this.fd = lnFd
+	this.listener = wrapListener
 	go this.Serve()
 	return nil
 }
@@ -111,7 +120,13 @@ func (this *Server) ListenAndServeTLS() error {
 		return err
 	}
 
-	this.listener = tls.NewListener(newListener(ln, this.MaxListenConnection), config)
+	wrapListener := newListener(ln, this.MaxListenConnection)
+	lnFd, fdErr := wrapListener.Fd()
+	if fdErr != nil {
+		log.Panicf("get listener fd error:%v", fdErr)
+	}
+	this.fd = lnFd
+	this.listener = tls.NewListener(wrapListener, config)
 	go this.Serve()
 	return nil
 }
