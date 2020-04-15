@@ -35,7 +35,7 @@ go get github.com/fevin/gracehttp
 ```
 
 ### 添加服务
-@see `main_test/gracehttp_main.go`
+@see [main_test/gracehttp_main.go](./main_test/gracehttp_main.go)
 
 #### 退出或者重启服务
 * 重启：`kill -HUP pid` 或 `kill -USR1 pid`
@@ -101,5 +101,5 @@ pong by pid:86818
 ```
 
 ---
-@see test `./gracehttp_test.go`    
-@see demo `./main_test/gracehttp_main.go`
+@see test [./gracehttp_test.go](./gracehttp_test.go).      
+@see demo [./main_test/gracehttp_main.go](./main_test/gracehttp_main.go)
