@@ -15,7 +15,7 @@
          * [平滑测试](#平滑测试)
 
 ## 环境
-* Go 1.9+
+* Go 1.14+
 
 ## 支持功能
 1. 平滑重启（`Zero-Downtime`）；
@@ -74,10 +74,9 @@ ok  	github.com/fevin/gracehttp	0.016s
 
 ### 平滑重启功能测试
 ```
-✗ export $GOPATH=$YOUR_PROGRAM
-✗ export $GOBIN=$YOUR_PROGRAM/bin
-✗ go get github.com/fevin/gracehttp
-✗ go install $YOUR_PROGRAM/src/github.com/fevin/gracehttp/main_test/gracehttp_main.go
+// 以下操作需要开启 go mod
+✗ git clone https://github.com/fevin/gracehttp.git
+✗ go build main_test/gracehttp_main.go
 ✗ nohup ./gracehttp_main 2>&1 > gracehttp.log &
 
 ✗ curl http://localhost:9090/ping
