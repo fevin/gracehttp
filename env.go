@@ -12,6 +12,10 @@ func setRestartEnv(key string) {
 	os.Setenv(env_SERVER_RESTART_PREFIX+key, "1")
 }
 
+func resetRestartEnv(key string) {
+	os.Setenv(env_SERVER_RESTART_PREFIX+key, "0")
+}
+
 func isRestartEnv(key string) bool {
 	envVal := os.Getenv(env_SERVER_RESTART_PREFIX + key)
 	return envVal == "1"

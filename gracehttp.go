@@ -31,7 +31,7 @@ func dispatchSrvId() int {
 
 func NewGraceHTTP() *GraceHTTP {
 	grace := new(GraceHTTP)
-	grace.server = new(gracefulServer)
+	grace.server = newGracefulServer()
 	grace.sig = make(chan os.Signal)
 	signal.Notify(grace.sig, notifySignals...)
 
@@ -58,19 +58,11 @@ func (this *GraceHTTP) AddServer(option *ServerOption) (*Server, error) {
 }
 
 func (this *GraceHTTP) Run() (retErr error) {
-	defer func() {
-		if err := recover(); err != nil {
-			panic(err)
-		} else {
-			this.server.WaitAllServer()
-		}
-	}()
-
 	if !flag.Parsed() {
 		flag.Parse()
 	}
 
-	return this.server.AsyncRunAllServer()
+	return this.server.RunAllServer()
 }
 
 func (this *GraceHTTP) exitHandler() {
@@ -80,7 +72,6 @@ func (this *GraceHTTP) exitHandler() {
 	case syscall.SIGHUP:
 		if err := this.startNewProcess(); err != nil {
 			srvLog.Error(fmt.Sprintf("Received SIG. [PID:%d, SIG:%v]", syscall.Getpid(), capturedSig))
-			return
 		}
 		this.shutdown()
 	case syscall.SIGINT:

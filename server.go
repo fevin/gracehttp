@@ -5,53 +5,75 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"log"
 	"net"
-	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
+func newGracefulServer() *gracefulServer {
+	server := new(gracefulServer)
+	server.srvList = make([]*Server, 0, 2)
+	server.srvErrChan = make(chan error)
+	return server
+}
+
 type gracefulServer struct {
-	srvList       []*Server
-	srvSucessList []*Server
-	srvWg         sync.WaitGroup
-	signalChan    chan os.Signal
+	srvList    []*Server
+	srvWg      sync.WaitGroup
+	srvErrChan chan error
+	signalChan chan os.Signal
 }
 
 func (this *gracefulServer) AddServer(srv *Server) {
 	this.srvList = append(this.srvList, srv)
 }
 
-func (this *gracefulServer) WaitAllServer() {
-	this.srvWg.Wait()
-}
-
-func (this *gracefulServer) AsyncRunAllServer() error {
+func (this *gracefulServer) RunAllServer() error {
 	for _, srv := range this.srvList {
-		if err := srv.Run(); err != nil {
-			this.shutdownAllServer()
-			return err
-		}
-		this.addSucessfulServer(srv)
+		this.srvWg.Add(1)
+		server := srv
+		go func() {
+			if err := server.Run(); err != nil {
+				select {
+				case this.srvErrChan <- err:
+				default:
+				}
+			}
+		}()
 	}
 
-	return nil
-}
-
-func (this *gracefulServer) addSucessfulServer(srv *Server) {
-	this.srvSucessList = append(this.srvSucessList, srv)
-	this.srvWg.Add(1)
+	this.srvWg.Wait()
+	select {
+	case err := <-this.srvErrChan:
+		return err
+	default:
+		return nil
+	}
 }
 
 func (this *gracefulServer) shutdownAllServer() {
-	for _, srv := range this.srvSucessList {
-		if err := srv.Shutdown(context.Background()); err != nil {
-			srvLog.Error(fmt.Sprintf("srv  closed fail, [pid:%d, srvrd:%d]", os.Getpid(), srv.id))
+	for index, srv := range this.srvList {
+		t := time.NewTimer(time.Duration(10 * time.Second))
+		done := make(chan struct{})
+		server := srv
+		go func() {
+			defer func() {
+				done <- struct{}{}
+			}()
+			if err := server.Shutdown(); err != nil {
+				srvLog.Error(fmt.Sprintf("srv closed fail, [pid:%d, srvrd:%d]", os.Getpid(), server.id))
+			}
+		}()
+
+		select {
+		case <-t.C:
+			srvLog.Error(fmt.Sprintf("server %d shutdown fail, exit directly!", index))
+		case <-done:
+			srvLog.Info(fmt.Sprintf("server %d shutdown successfully!", index))
 		}
 		this.srvWg.Done()
 	}
-	this.srvSucessList = this.srvSucessList[:0]
 }
 
 // 支持优雅重启的http服务
@@ -87,12 +109,11 @@ func (this *Server) ListenAndServe() error {
 	wrapListener := newListener(ln, this.MaxListenConnection)
 	lnFd, fdErr := wrapListener.Fd()
 	if fdErr != nil {
-		log.Panicf("get listener fd error:%v", fdErr)
+		return fmt.Errorf("get listener fd error:%v", fdErr)
 	}
 	this.fd = lnFd
 	this.listener = wrapListener
-	go this.Serve()
-	return nil
+	return this.Serve()
 }
 
 func (this *Server) ListenAndServeTLS() error {
@@ -123,22 +144,19 @@ func (this *Server) ListenAndServeTLS() error {
 	wrapListener := newListener(ln, this.MaxListenConnection)
 	lnFd, fdErr := wrapListener.Fd()
 	if fdErr != nil {
-		log.Panicf("get listener fd error:%v", fdErr)
+		return fmt.Errorf("get listener fd error:%v", fdErr)
 	}
 	this.fd = lnFd
 	this.listener = tls.NewListener(wrapListener, config)
-	go this.Serve()
-	return nil
+	return this.Serve()
 }
 
-func (this *Server) Serve() {
-	if err := this.HTTPServer.Serve(this.listener); err != nil && err != http.ErrServerClosed {
-		panic(fmt.Sprintf("srv err:%v, [pid:%d, srvid:%d, srvAddr:%v]", err, os.Getpid(), this.id, this.getAddr()))
-	}
+func (this *Server) Serve() error {
+	return this.HTTPServer.Serve(this.listener)
 }
 
-func (this *Server) Shutdown(ctx context.Context) error {
-	return this.HTTPServer.Shutdown(ctx)
+func (this *Server) Shutdown() error {
+	return this.HTTPServer.Shutdown(context.Background())
 }
 
 func (this *Server) getNetTCPListener() (*net.TCPListener, error) {
@@ -146,7 +164,9 @@ func (this *Server) getNetTCPListener() (*net.TCPListener, error) {
 	var ln net.Listener
 	var err error
 
-	if isRestartEnv(this.getAddr()) {
+	addr := this.getAddr()
+	if isRestartEnv(addr) {
+		resetRestartEnv(addr)
 		file := os.NewFile(uintptr(this.id+2), "") // 此处加 2，因为 0/1/2 分别对应标准输入/输出/错误
 		ln, err = net.FileListener(file)
 		if err != nil {
@@ -154,7 +174,7 @@ func (this *Server) getNetTCPListener() (*net.TCPListener, error) {
 			return nil, err
 		}
 	} else {
-		ln, err = net.Listen("tcp", this.getAddr())
+		ln, err = net.Listen("tcp", addr)
 		if err != nil {
 			err = fmt.Errorf("net.Listen error: %v", err)
 			return nil, err
